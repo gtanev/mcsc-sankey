@@ -1,0 +1,13 @@
+{
+  "name": "MCSC Global Sankey Diagram",
+  "short_name": "MCSC Sankey",
+  "theme_color": "#ffffff",
+  "background_color": "#f1f3f5",
+  "display": "fullScreen",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512" }
+  ]
+}

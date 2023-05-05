@@ -1,0 +1,421 @@
+diff --git a/node_modules/d3-sankey-circular-links/dist/d3-sankey-circular.es.js b/node_modules/d3-sankey-circular-links/dist/d3-sankey-circular.es.js
+index 3d79d05..92a6c81 100644
+--- a/node_modules/d3-sankey-circular-links/dist/d3-sankey-circular.es.js
++++ b/node_modules/d3-sankey-circular-links/dist/d3-sankey-circular.es.js
+@@ -115,56 +115,53 @@ function getNodeID(node, id) {
+ }
+ 
+ // The main sankeyCircular functions
++function sankeyCircular() {
++  sankeyCircular.__revision = 5.3;
+ 
+-// Some constants for circular link calculations
+-var verticalMargin = 25;
+-var baseRadius = 10;
+-var scale = 0.3; //Possibly let user control this, although anything over 0.5 starts to get too cramped
+-
+-function sankeyCircular () {
+   // Set the default values
+-  var x0 = 0,
++  let x0 = 0,
+       y0 = 0,
+       x1 = 1,
+       y1 = 1,
+-      // extent
+-  dx = 24,
+-      // nodeWidth
+-  py,
+-      // nodePadding, for vertical postioning
+-  id = defaultId,
++      dx = 24,  // nodeWidth
++      py,       // nodePadding, for vertical positioning
++      id = defaultId,
+       align = justify,
+       nodes = defaultNodes,
+       links = defaultLinks,
+-      iterations = 32,
+-      circularLinkGap = 2,
++      graph = undefined,
++      iterations = 6,
++      linkIterations = 6,
++      circularLinkGap = 10,
++      circularLinkMargin = 25,
++      circularLinkRadius = 10,
++      scaleFactor = 0.2,
+       paddingRatio,
+       sortNodes = null;
+ 
+-  function sankeyCircular() {
+-    var graph = {
++  sankeyCircular.build = function () {
++    graph = {
+       nodes: nodes.apply(null, arguments),
+       links: links.apply(null, arguments)
++    };
+ 
+-      // Process the graph's nodes and links, setting their positions
+-
+-      // 1.  Associate the nodes with their respective links, and vice versa
+-    };computeNodeLinks(graph);
++    // 1.  Associate the nodes with their respective links, and vice versa
++    computeNodeLinks(graph);
+ 
+     // 2.  Determine which links result in a circular path in the graph
+     identifyCircles(graph, id, sortNodes);
+ 
+-    // 4. Calculate the nodes' values, based on the values of the incoming and outgoing links
++    // 3. Calculate the nodes' values, based on the values of the incoming and outgoing links
+     computeNodeValues(graph);
+ 
+-    // 5.  Calculate the nodes' depth based on the incoming and outgoing links
++    // 4.  Calculate the nodes' depth based on the incoming and outgoing links
+     //     Sets the nodes':
+     //     - depth:  the depth in the graph
+     //     - column: the depth (0, 1, 2, etc), as is relates to visual position from left to right
+     //     - x0, x1: the x coordinates, as is relates to visual position from left to right
+     computeNodeDepths(graph);
+ 
+-    // 3.  Determine how the circular links will be drawn,
++    // 5.  Determine how the circular links will be drawn,
+     //     either travelling back above the main chart ("top")
+     //     or below the main chart ("bottom")
+     selectCircularLinkTypes(graph, id);
+@@ -176,9 +173,8 @@ function sankeyCircular () {
+ 
+     // 7.  Sort links per node, based on the links' source/target nodes' breadths
+     // 8.  Adjust nodes that overlap links that span 2+ columns
+-    var linkSortingIterations = 4; //Possibly let user control this number, like the iterations over node placement
+-    for (var iteration = 0; iteration < linkSortingIterations; iteration++) {
+ 
++    for (var i = 0; i < linkIterations; i++) {
+       sortSourceLinks(graph, y1, id);
+       sortTargetLinks(graph, y1, id);
+       resolveNodeLinkOverlaps(graph, y0, y1, id);
+@@ -192,12 +188,22 @@ function sankeyCircular () {
+     // 8.2  Adjust node and link positions back to fill height of chart area if compressed
+     fillHeight(graph, y0, y1);
+ 
+-    // 9. Calculate visually appealling path for the circular paths, and create the "d" string
+-    addCircularPathData(graph, circularLinkGap, y1, id);
++    // 9. Calculate visually appealing path for the circular paths, and create the "d" string
++    addCircularPathData(graph, circularLinkGap, circularLinkMargin, circularLinkRadius, y1, id);
+ 
+     return { nodes: graph.nodes, links: graph.links, dragNDropY: y1 };
+   } // end of sankeyCircular function
+ 
++  sankeyCircular.update = function (moveNodes = false) {
++    computeLinkBreadths(graph);
++
++    sortSourceLinks(graph, y1, id, moveNodes);
++    sortTargetLinks(graph, y1, id);
++
++    addCircularPathData(graph, circularLinkGap, circularLinkMargin, circularLinkRadius, y1, id);
++
++    return graph;
++  };
+ 
+   // Set the sankeyCircular parameters
+   // nodeID, nodeAlign, nodeWidth, nodePadding, nodes, links, size, extent, iterations, nodePaddingRatio, circularLinkGap
+@@ -237,68 +243,32 @@ function sankeyCircular () {
+     return arguments.length ? (iterations = +_, sankeyCircular) : iterations;
+   };
+ 
++  sankeyCircular.linkIterations = function (_) {
++    return arguments.length ? (linkIterations = +_, sankeyCircular) : linkIterations;
++  };
++
+   sankeyCircular.circularLinkGap = function (_) {
+     return arguments.length ? (circularLinkGap = +_, sankeyCircular) : circularLinkGap;
+   };
+ 
+-  sankeyCircular.nodePaddingRatio = function (_) {
+-    return arguments.length ? (paddingRatio = +_, sankeyCircular) : paddingRatio;
++  sankeyCircular.circularLinkMargin = function (_) {
++    return arguments.length ? (circularLinkMargin = +_, sankeyCircular) : circularLinkMargin;
+   };
+ 
+-  sankeyCircular.sortNodes = function (_) {
+-    return arguments.length ? (sortNodes = _, sankeyCircular) : sortNodes;
++  sankeyCircular.circularLinkRadius = function (_) {
++    return arguments.length ? (circularLinkRadius = +_, sankeyCircular) : circularLinkRadius;
+   };
+ 
+-  sankeyCircular.update = function (graph) {
+-    // 5.  Calculate the nodes' depth based on the incoming and outgoing links
+-    //     Sets the nodes':
+-    //     - depth:  the depth in the graph
+-    //     - column: the depth (0, 1, 2, etc), as is relates to visual position from left to right
+-    //     - x0, x1: the x coordinates, as is relates to visual position from left to right
+-    // computeNodeDepths(graph)
+-
+-    // 3.  Determine how the circular links will be drawn,
+-    //     either travelling back above the main chart ("top")
+-    //     or below the main chart ("bottom")
+-    selectCircularLinkTypes(graph, id);
+-
+-    // 6.  Calculate the nodes' and links' vertical position within their respective column
+-    //     Also readjusts sankeyCircular size if circular links are needed, and node x's
+-    // computeNodeBreadths(graph, iterations, id)
+-    computeLinkBreadths(graph);
+-
+-    // Force position of circular link type based on position
+-    graph.links.forEach(function (link) {
+-      if (link.circular) {
+-        link.circularLinkType = link.y0 + link.y1 < y1 ? 'top' : 'bottom';
+-
+-        link.source.circularLinkType = link.circularLinkType;
+-        link.target.circularLinkType = link.circularLinkType;
+-      }
+-    });
++  sankeyCircular.scaleFactor = function (_) {
++    return arguments.length ? (scaleFactor = +_, sankeyCircular) : scaleFactor;
++  };
+ 
+-    sortSourceLinks(graph, y1, id, false); // Sort links but do not move nodes
+-    sortTargetLinks(graph, y1, id);
++  sankeyCircular.nodePaddingRatio = function (_) {
++    return arguments.length ? (paddingRatio = +_, sankeyCircular) : paddingRatio;
++  };
+ 
+-    // 7.  Sort links per node, based on the links' source/target nodes' breadths
+-    // 8.  Adjust nodes that overlap links that span 2+ columns
+-    // var linkSortingIterations = 4; //Possibly let user control this number, like the iterations over node placement
+-    // for (var iteration = 0; iteration < linkSortingIterations; iteration++) {
+-    //
+-    //   sortSourceLinks(graph, y1, id)
+-    //   sortTargetLinks(graph, y1, id)
+-    //   resolveNodeLinkOverlaps(graph, y0, y1, id)
+-    //   sortSourceLinks(graph, y1, id)
+-    //   sortTargetLinks(graph, y1, id)
+-    //
+-    // }
+-
+-    // 8.1  Adjust node and link positions back to fill height of chart area if compressed
+-    // fillHeight(graph, y0, y1)
+-
+-    // 9. Calculate visually appealling path for the circular paths, and create the "d" string
+-    addCircularPathData(graph, circularLinkGap, y1, id);
+-    return graph;
++  sankeyCircular.sortNodes = function (_) {
++    return arguments.length ? (sortNodes = _, sankeyCircular) : sortNodes;
+   };
+ 
+   // Populate the sourceLinks and targetLinks for each node.
+@@ -349,8 +319,8 @@ function sankeyCircular () {
+   function getCircleMargins(graph) {
+     var totalTopLinksWidth = 0,
+         totalBottomLinksWidth = 0,
+-        totalRightLinksWidth = 0,
+-        totalLeftLinksWidth = 0;
++        totalRightLinksWidth = { top: 0, bottom: 0},
++        totalLeftLinksWidth = { top: 0, bottom: 0};
+ 
+     var maxColumn = max(graph.nodes, function (node) {
+       return node.column;
+@@ -359,28 +329,51 @@ function sankeyCircular () {
+     graph.links.forEach(function (link) {
+       if (link.circular) {
+         if (link.circularLinkType == 'top') {
+-          totalTopLinksWidth = totalTopLinksWidth + link.width;
++          totalTopLinksWidth += link.width + circularLinkGap;
++
++          if (link.target.column == 0) {
++            totalLeftLinksWidth.top += link.width + circularLinkGap;
++          }
++
++          if (link.source.column == maxColumn) {
++            totalRightLinksWidth.top += link.width + circularLinkGap;
++          }
+         } else {
+-          totalBottomLinksWidth = totalBottomLinksWidth + link.width;
+-        }
++          totalBottomLinksWidth += link.width + circularLinkGap;
+ 
+-        if (link.target.column == 0) {
+-          totalLeftLinksWidth = totalLeftLinksWidth + link.width;
+-        }
++          if (link.target.column == 0) {
++            totalLeftLinksWidth.bottom += link.width + circularLinkGap;
++          }
+ 
+-        if (link.source.column == maxColumn) {
+-          totalRightLinksWidth = totalRightLinksWidth + link.width;
++          if (link.source.column == maxColumn) {
++            totalRightLinksWidth.bottom += link.width + circularLinkGap;
++          }
+         }
+       }
+     });
+ 
+     //account for radius of curves and padding between links
+-    totalTopLinksWidth = totalTopLinksWidth > 0 ? totalTopLinksWidth + verticalMargin + baseRadius : totalTopLinksWidth;
+-    totalBottomLinksWidth = totalBottomLinksWidth > 0 ? totalBottomLinksWidth + verticalMargin + baseRadius : totalBottomLinksWidth;
+-    totalRightLinksWidth = totalRightLinksWidth > 0 ? totalRightLinksWidth + verticalMargin + baseRadius : totalRightLinksWidth;
+-    totalLeftLinksWidth = totalLeftLinksWidth > 0 ? totalLeftLinksWidth + verticalMargin + baseRadius : totalLeftLinksWidth;
+ 
+-    return { "top": totalTopLinksWidth, "bottom": totalBottomLinksWidth, "left": totalLeftLinksWidth, "right": totalRightLinksWidth };
++    if (totalTopLinksWidth > 0) {
++      totalTopLinksWidth += circularLinkMargin + circularLinkRadius - circularLinkGap;
++    }
++
++    if (totalBottomLinksWidth > 0) {
++      totalBottomLinksWidth += circularLinkMargin + circularLinkRadius - circularLinkGap;
++    }
++
++    let right = Math.max(totalRightLinksWidth.top, totalRightLinksWidth.bottom);
++    let left = Math.max(totalLeftLinksWidth.top, totalLeftLinksWidth.bottom);
++
++    if (right > 0) {
++      right += circularLinkMargin + circularLinkRadius - circularLinkGap;
++    }
++
++    if (left > 0) {
++      left += circularLinkMargin + circularLinkRadius - circularLinkGap;
++    }
++
++    return { top: 0, bottom: 0, left: left, right: right };
+   }
+ 
+   // Update the x0, y0, x1 and y1 for the sankeyCircular, to allow space for any circular links
+@@ -481,14 +474,14 @@ function sankeyCircular () {
+       });
+ 
+       //calculate the widths of the links
+-      ky = ky * scale;
++      ky = ky * scaleFactor;
+ 
+       graph.links.forEach(function (link) {
+         link.width = link.value * ky;
+       });
+ 
+       //determine how much to scale down the chart, based on circular links
+-      var margin = getCircleMargins(graph);
++      var margin = { top: 0, bottom: 0, right: 0, left: 0 }; //getCircleMargins(graph);
+       var ratio = scaleSankeySize(graph, margin);
+ 
+       //re-calculate widths
+@@ -828,7 +821,7 @@ function calcVerticalBuffer(links, circularLinkGap, id) {
+ }
+ 
+ // calculate the optimum path for a link to reduce overlaps
+-function addCircularPathData(graph, circularLinkGap, y1, id) {
++function addCircularPathData(graph, circularLinkGap, circularLinkMargin, circularLinkRadius, y1, id) {
+   //var baseRadius = 10
+   var buffer = 5;
+   //var verticalMargin = 25
+@@ -848,17 +841,19 @@ function addCircularPathData(graph, circularLinkGap, y1, id) {
+   var topLinks = graph.links.filter(function (l) {
+     return l.circularLinkType == 'top';
+   });
+-  /* topLinks = */calcVerticalBuffer(topLinks, circularLinkGap, id);
++  /* topLinks = */
++  calcVerticalBuffer(topLinks, circularLinkGap, id);
+ 
+   var bottomLinks = graph.links.filter(function (l) {
+     return l.circularLinkType == 'bottom';
+   });
+-  /* bottomLinks = */calcVerticalBuffer(bottomLinks, circularLinkGap, id);
++  /* bottomLinks = */
++  calcVerticalBuffer(bottomLinks, circularLinkGap, id);
+ 
+   // add the base data for each link
+   graph.links.forEach(function (link) {
+     if (link.circular) {
+-      link.circularPathData.arcRadius = link.width + baseRadius;
++      link.circularPathData.arcRadius = link.width + circularLinkRadius;
+       link.circularPathData.leftNodeBuffer = buffer;
+       link.circularPathData.rightNodeBuffer = buffer;
+       link.circularPathData.sourceWidth = link.source.x1 - link.source.x0;
+@@ -869,18 +864,18 @@ function addCircularPathData(graph, circularLinkGap, y1, id) {
+ 
+       // for self linking paths, and that the only circular link in/out of that node
+       if (selfLinking(link, id) && onlyCircularLink(link)) {
+-        link.circularPathData.leftSmallArcRadius = baseRadius + link.width / 2;
+-        link.circularPathData.leftLargeArcRadius = baseRadius + link.width / 2;
+-        link.circularPathData.rightSmallArcRadius = baseRadius + link.width / 2;
+-        link.circularPathData.rightLargeArcRadius = baseRadius + link.width / 2;
++        link.circularPathData.leftSmallArcRadius = circularLinkRadius + link.width / 2;
++        link.circularPathData.leftLargeArcRadius = circularLinkRadius + link.width / 2;
++        link.circularPathData.rightSmallArcRadius = circularLinkRadius + link.width / 2;
++        link.circularPathData.rightLargeArcRadius = circularLinkRadius + link.width / 2;
+ 
+         if (link.circularLinkType == 'bottom') {
+-          link.circularPathData.verticalFullExtent = link.source.y1 + verticalMargin + link.circularPathData.verticalBuffer;
++          link.circularPathData.verticalFullExtent = link.source.y1 + circularLinkMargin + link.circularPathData.verticalBuffer;
+           link.circularPathData.verticalLeftInnerExtent = link.circularPathData.verticalFullExtent - link.circularPathData.leftLargeArcRadius;
+           link.circularPathData.verticalRightInnerExtent = link.circularPathData.verticalFullExtent - link.circularPathData.rightLargeArcRadius;
+         } else {
+           // top links
+-          link.circularPathData.verticalFullExtent = link.source.y0 - verticalMargin - link.circularPathData.verticalBuffer;
++          link.circularPathData.verticalFullExtent = link.source.y0 - circularLinkMargin - link.circularPathData.verticalBuffer;
+           link.circularPathData.verticalLeftInnerExtent = link.circularPathData.verticalFullExtent + link.circularPathData.leftLargeArcRadius;
+           link.circularPathData.verticalRightInnerExtent = link.circularPathData.verticalFullExtent + link.circularPathData.rightLargeArcRadius;
+         }
+@@ -902,8 +897,8 @@ function addCircularPathData(graph, circularLinkGap, y1, id) {
+         var radiusOffset = 0;
+         sameColumnLinks.forEach(function (l, i) {
+           if (l.circularLinkID == link.circularLinkID) {
+-            link.circularPathData.leftSmallArcRadius = baseRadius + link.width / 2 + radiusOffset;
+-            link.circularPathData.leftLargeArcRadius = baseRadius + link.width / 2 + i * circularLinkGap + radiusOffset;
++            link.circularPathData.leftSmallArcRadius = circularLinkRadius + link.width / 2 + radiusOffset;
++            link.circularPathData.leftLargeArcRadius = circularLinkRadius + link.width / 2 + i * circularLinkGap + radiusOffset;
+           }
+           radiusOffset = radiusOffset + l.width;
+         });
+@@ -922,20 +917,20 @@ function addCircularPathData(graph, circularLinkGap, y1, id) {
+         radiusOffset = 0;
+         sameColumnLinks.forEach(function (l, i) {
+           if (l.circularLinkID == link.circularLinkID) {
+-            link.circularPathData.rightSmallArcRadius = baseRadius + link.width / 2 + radiusOffset;
+-            link.circularPathData.rightLargeArcRadius = baseRadius + link.width / 2 + i * circularLinkGap + radiusOffset;
++            link.circularPathData.rightSmallArcRadius = circularLinkRadius + link.width / 2 + radiusOffset;
++            link.circularPathData.rightLargeArcRadius = circularLinkRadius + link.width / 2 + i * circularLinkGap + radiusOffset;
+           }
+           radiusOffset = radiusOffset + l.width;
+         });
+ 
+         // bottom links
+         if (link.circularLinkType == 'bottom') {
+-          link.circularPathData.verticalFullExtent = Math.max(y1, link.source.y1, link.target.y1) + verticalMargin + link.circularPathData.verticalBuffer;
++          link.circularPathData.verticalFullExtent = Math.max(y1, link.source.y1, link.target.y1) + circularLinkMargin + link.circularPathData.verticalBuffer;
+           link.circularPathData.verticalLeftInnerExtent = link.circularPathData.verticalFullExtent - link.circularPathData.leftLargeArcRadius;
+           link.circularPathData.verticalRightInnerExtent = link.circularPathData.verticalFullExtent - link.circularPathData.rightLargeArcRadius;
+         } else {
+           // top links
+-          link.circularPathData.verticalFullExtent = minY - verticalMargin - link.circularPathData.verticalBuffer;
++          link.circularPathData.verticalFullExtent = minY - circularLinkMargin - link.circularPathData.verticalBuffer;
+           link.circularPathData.verticalLeftInnerExtent = link.circularPathData.verticalFullExtent + link.circularPathData.leftLargeArcRadius;
+           link.circularPathData.verticalRightInnerExtent = link.circularPathData.verticalFullExtent + link.circularPathData.rightLargeArcRadius;
+         }
+@@ -1443,15 +1438,15 @@ function fillHeight(graph, y0, y1) {
+   var top = false;
+   var bottom = false;
+ 
+-  links.forEach(function (link) {
++/*  links.forEach(function (link) {
+     if (link.circularLinkType == "top") {
+       top = true;
+     } else if (link.circularLinkType == "bottom") {
+       bottom = true;
+     }
+-  });
++  });*/
+ 
+-  if (top == false || bottom == false) {
++  if (top == false && bottom == false) {
+     var minY0 = min(nodes, function (node) {
+       return node.y0;
+     });
+@@ -1511,4 +1506,11 @@ function resolveNodesOverlap(graph, y0, py) {
+   });
+ }
+ 
+-export { sankeyCircular, addCircularPathData, center as sankeyCenter, left as sankeyLeft, right as sankeyRight, justify as sankeyJustify };
++export {
++  sankeyCircular,
++  addCircularPathData,
++  center as sankeyCenter,
++  left as sankeyLeft,
++  right as sankeyRight,
++  justify as sankeyJustify
++};
